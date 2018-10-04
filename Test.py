@@ -42,7 +42,7 @@ def Test():
     #------------------------------------------------------------------------
     #------------------------------------------------------------------------
     if False:  # Not run
-        print( "SMap localization (θ) vs prediction skill (ρ) -----------------")
+        print("SMap localization (θ) vs prediction skill (ρ) -----------------")
         if not args.embedded :
             s = './SMapNL.py -i TentMap_rEDM.csv -c TentMap ' +\
                 '-l 1 100 -p 201 500 -T 1 -E 2 -P'
@@ -95,8 +95,8 @@ def Test():
     else:
         # Note this considers the 5 variables (V1-V5) to be the embedding
         # setting E = 5 (len(columns)) giving excellent s-map coef
-        s = './Predict.py -e -i LorenzData1000.csv -m smap ' +\
-            '-r V1 -c V1 V2 V3 V4 V5 -l 1 300 -p 301 990 -T 1 -t 3 -P'
+        # s = './Predict.py -e -i LorenzData1000.csv -m smap ' +\
+        #     '-r V1 -c V1 V2 V3 V4 V5 -l 1 300 -p 301 990 -T 1 -t 3 -P'
         # This would be the usual: read 5 columns from a single var embedding
         s = './Predict.py -e -i Embed10_V1_Lorenz.csv -m smap ' +\
             '-E 5 -l 1 300 -p 301 990 -T 1 -t 3 -P'
@@ -129,7 +129,7 @@ def Test():
         s = './CCM.py -i sardine_anchovy_sst.csv -c anchovy -r np_sst ' +\
             '-E 3 -s 100 -L 10 80 10 -R -P'
         try:
-            run( s.split(), timeout = 4 * args.timeout  )
+            run( s.split(), timeout = args.timeout  )
         except TimeoutExpired:
             pass
         print()

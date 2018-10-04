@@ -5,12 +5,14 @@ from multiprocessing import Pool
 from copy            import deepcopy
 
 # Community modules
-from numpy.random import randint, seed
-from numpy        import mean, zeros, arange, concatenate
+from numpy.random  import randint, seed
+from numpy         import mean, zeros, arange, concatenate, \
+                   round, amax, full, unique
 import matplotlib.pyplot as plt
 
 # Local modules
-from EDM import EmbedData, FindNeighbors, SimplexProjection, ComputeError, nRow
+from EDM import EmbedData, SimplexProjection, \
+                ComputeError, nRow, Distance, DistanceMetric
 from ArgParse import ParseCmdLine
 
 #----------------------------------------------------------------------------
@@ -22,14 +24,17 @@ def CCM():
 
     Data are a .csv file with multiple simultaneous observations (columns)
     and "time" in the first column.  The -r (target) column is used for
-    the cross prediction, -c (column) will be embedded to dimension E.
+    the cross prediction, -c (column) is embedded to dimension E.
+    CCM is performed simultaneously between both target and column with
+    the use of a process Pool. 
+    
+    Arguments: 
+    -L (libsize) specifies a list of library sizes [start, stop, increment]
+    -s (subsample) number of subsamples generated at each library size, if:
+    -R (replacement) subsample with replacement. 
 
-    The -L (libsize) argument specifies a list of library sizes [start,
-    stop, increment], -s (subsample) the number of subsamples generated 
-    at each library size if -R (replacment) is specified. 
-
-    "Predictions" are made over the same data/embedding slices as the
-    library so that -l and -p parameters have no meaning. 
+    Simplex "Predictions" are made over the same data/embedding slices as
+    the library so that -l and -p parameters have no meaning. 
     '''
 
     args = ParseCmdLine()
@@ -126,7 +131,6 @@ def CCM():
                 '  E=' + str( args.E  ) )
         plt.show()
 
-
 #----------------------------------------------------------------------------
 # 
 #----------------------------------------------------------------------------
@@ -139,7 +143,7 @@ def CrossMap( args ) :
     libraryMatrix = predictionMatrix = embedding
     N_row = nRow( libraryMatrix )
 
-    # Range of library indices
+    # Range of CCM library indices
     start, stop, increment = args.libsize
     
     if args.randomLib :
@@ -156,14 +160,21 @@ def CrossMap( args ) :
             print( "CCM() Set k_NN to E + 1 = " + str( args.k_NN ) +\
                    " for SimplexProjection." )
 
-    #----------------------------------------------------------
-    # Predictions
-    #----------------------------------------------------------
+    #-----------------------------------------------------------------
     print( "CCM(): Simplex cross mapping from " + str( args.columns ) +\
            " to " + args.target +  "  E=" + str( args.E ) +\
            " k_nn=" + str( args.k_NN ) +\
            "  Library range: [{}, {}, {}]".format( start, stop, increment ))
 
+    #-----------------------------------------------------------------
+    # Distance for all possible pred : lib E-dimensional vector pairs
+    # Distances is a Matrix of all row to to row distances
+    #-----------------------------------------------------------------
+    Distances = GetDistances( libraryMatrix, args )
+    
+    #----------------------------------------------------------
+    # Predictions
+    #----------------------------------------------------------
     PredictLibStats = {} # { lib_size : ( rho, r, rmse, mae ) }
     # Loop for library sizes
     for lib_size in range( start, stop + 1, increment ) :
@@ -200,13 +211,10 @@ def CrossMap( args ) :
                         lib_i     = concatenate( (lib_start, lib_wrap), axis=0)
 
             #----------------------------------------------------------
-            # k_NN nearest neighbors
+            # k_NN nearest neighbors : Local GetNeighbors() function
             #----------------------------------------------------------
-            # FindNeighbors will ignore degenerate lib/pred coordinates
-            neighbors, distances = FindNeighbors(libraryMatrix   [ lib_i, : ],
-                                                 predictionMatrix[ lib_i, : ],
-                                                 args )
-                
+            neighbors, distances = GetNeighbors( Distances, lib_i, args )
+
             predictions = SimplexProjection( libraryMatrix[ lib_i, : ],
                                              target       [ lib_i ],
                                              neighbors,
@@ -227,6 +235,110 @@ def CrossMap( args ) :
     # Return tuple with ( ID, PredictLibStats{} )
     return ( str( args.columns ) + " to " + args.target, PredictLibStats )
 
+#----------------------------------------------------------------------------
+# 
+#----------------------------------------------------------------------------
+def GetDistances( libraryMatrix, args ) :
+    '''
+    Note that for CCM the libraryMatrix and predictionMatrix are the same.
+
+    Return Distances: a square matrix with distances.
+    Matrix elements D[i,j] hold the distance between the E-dimensional
+    phase space point (vector) between rows (observations) i and j.
+    '''
+    
+    N_row = nRow( libraryMatrix )
+    
+    D = full( (N_row, N_row), 1E30 ) # Distance matrix init to 1E30
+    E = args.E + 1
+    
+    for row in range( N_row ) :
+        # Get E-dimensional vector from this library row
+        # Exclude the 1st column (j=0) of times
+        y = libraryMatrix[ row, 1:E: ]
+
+        for col in range( N_row ) :
+            # Ignore the diagonal (row == col)
+            if row == col :
+                continue
+            
+            # Find distance between vector (y) and other library vector
+            # Exclude the 1st column (j=0) of Time
+            D[ row, col ] = Distance( libraryMatrix[ col, 1:E: ], y )
+            # Insert degenerate values since D[i,j] = D[j,i]
+            D[ col, row ] = D[ row, col ]
+
+    return ( D )
+    
+#----------------------------------------------------------------------------
+# 
+#----------------------------------------------------------------------------
+def GetNeighbors( Distances, lib_i, args ) :
+    '''
+    Return a tuple of ( neighbors, distances ). neighbors is a matrix of 
+    row indices in the library matrix. Each neighbors row represents one 
+    prediction vector. Columns are the indices of k_NN nearest neighbors 
+    for the prediction vector (phase-space point) in the library matrix.
+    distances is a matrix with the same shape as neighbors holding the 
+    corresponding distance values in each row.
+
+    Note that the indices in neighbors are not the original indices in
+    the libraryMatrix rows (observations), but are with respect to the
+    distances subset defined by the list of rows lib_i, and so have values
+    from 0 to len(lib_i)-1.
+    '''
+    
+    N_row = len( lib_i )           # Subset of libraryMatrix and Distances
+    col_i = arange( len( lib_i ) ) # Vector of col indices [0,...len(lib_i)-1]
+    k_NN  = args.k_NN
+
+    if args.Debug :
+        print( 'GetNeighbors() Distances:' )
+        print( round( Distances[ 0:5, 0:5 ], 4 ) )
+        print( 'N_row = ' + str( N_row ) )
+
+    # Matrix to hold libraryMatrix row indices
+    # One row for each prediction vector, k_NN columns for each index
+    neighbors = zeros( (N_row, k_NN), dtype = int )
+
+    # Matrix to hold libraryMatrix k_NN distance values
+    # One row for each prediction vector, k_NN columns for each index
+    distances = zeros( (N_row, k_NN) )
+
+    # For each prediction vector (row in predictionMatrix) find the list
+    # of library indices that are within k_NN points
+    row = 0
+    for row_i in lib_i :
+        # Take D[ row, col ] a row at a time, col represent other row distance
+        # Sort based on Distance with paired column indices
+        # D_row_i is a list of tuples sorted by increasing distance
+        D_row_i = sorted( zip( Distances[ row_i, lib_i ], col_i ) )
+
+        # Take the first k_NN distances and column indices
+        k_NN_distances = [ x[0] for x in D_row_i ][ 0:k_NN ] # distance
+        k_NN_neighbors = [ x[1] for x in D_row_i ][ 0:k_NN ] # index
+
+        if args.Debug :
+            if amax( k_NN_distances ) > 1E29 :
+                raise RuntimeError( "GetNeighbors() Library is too small to " +\
+                                    "resolve " + str( k_NN ) + " k_NN "   +\
+                                    "neighbors." )
+        
+            # Check for ties.  JP: haven't found any so far...
+            if len( k_NN_neighbors ) != len( unique( k_NN_neighbors ) ) :
+                raise RuntimeError( "GetNeighbors() Degenerate neighbors" )
+        
+        neighbors[ row, ] = k_NN_neighbors
+        distances[ row, ] = k_NN_distances
+
+        row = row + 1
+    
+    if args.Debug :
+        print( 'GetNeighbors()  neighbors' )
+        print( neighbors[ 0:5, ] )
+
+    return ( neighbors, distances )
+    
 #----------------------------------------------------------------------------
 # Provide for cmd line invocation and clean module loading.
 #----------------------------------------------------------------------------

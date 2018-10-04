@@ -390,13 +390,13 @@ def SimplexProjection( libraryMatrix, target,
 def FindNeighbors( libraryMatrix, predictionMatrix, args ) :
     '''
     libraryMatrix, predictionMatrix are row subsets of the timeseries
-    emdedding matrix, each matrix has rows:
+    emdedding matrix, each matrix has columns:
 
                 [ time, data, data-τ, data-2τ, ... ]
 
-    Note: first column     i=0 are time values/indices
-          second column    i=1 unlagged data values
-          third... columns i=2,3... delayed data values
+    Note: first column     i = 0      : time values/indices
+          second column    i = 1      : unlagged data values
+          third... columns i = 2,3... : delayed data values
 
     Return a tuple of ( neighbors, distances ). neighbors is a matrix of 
     row indices in the library matrix. Each neighbors row represents one 
