@@ -4,7 +4,7 @@ from collections import OrderedDict
 
 # Community modules
 import numpy as np
-from   numpy.linalg     import norm, lstsq
+from   numpy.linalg     import norm, lstsq, svd
 from   matplotlib.dates import datestr2num, num2date
 import matplotlib.pyplot as plt
 
@@ -22,14 +22,18 @@ class DistanceMetric :
 #----------------------------------------------------------------------------
 def Prediction( embedding, colNames, target, args ):
     '''
-    Simplex projection of observational data (Sugihara, 1990).
-    SMap    projection of observational data (Sugihara, 1994).
+    Primary interface and wrapper for SimplexProjection() [Sugihara, 1990]
+    or SMapProjection() [Sugihara, 1994].
+
+    This function is typically called from a wrapper that reads the 
+    data and performs the embedding, e.g. Predict(), PredictDecay(),
+    SMapNL(), Multiview(). 
 
     The embedding is a matrix of multivariable (column) timeseries
     observatins (rows).  This can be prepared by ReadEmbeddedData() 
     or EmbedData().  target is a vector of observations specified with
     the -r option.  If None, the first data column (j=1) is used.
-    Embedding defaults to x(t)+τ; -f (--forwardTau) returns x(t)-τ.
+    Embedding defaults to x(t)+nτ; -f (--forwardTau) returns x(t)-nτ.
 
     The embedding is subsetted into two matrices as specified
     by the -l (--library) and -p (--prediction) start:stop indices 
@@ -127,13 +131,15 @@ def Prediction( embedding, colNames, target, args ):
                    " dimensions of " + args.inputFile + " Tp=" +\
                    str( args.Tp ) + " θ=" + str( args.theta ) )
         
-        Predictions, Coeff = SMapProjection( libraryMatrix, predictionMatrix,
-                                             target, neighbors, distances,
-                                             args )
+        Predictions, Coeff, Jacobians = SMapProjection( libraryMatrix,
+                                                        predictionMatrix,
+                                                        target, neighbors,
+                                                        distances, args )
+
     else :
         raise RuntimeError( "Prediction() Invalid projection method: ",
                             args.method )
-
+        
     #----------------------------------------------------------
     # Output
     #----------------------------------------------------------
@@ -146,17 +152,31 @@ def Prediction( embedding, colNames, target, args ):
                                    stop  = Time[-1] + (args.Tp + 1) * dt,
                                    step  = dt )
         timeExtension = timeExtension[ 0 : args.Tp ]
-        Time = np.append( Time, timeExtension )
+        Time          = np.append( Time, timeExtension )
 
         # Extend and shift Predictions to the appropriate time row
         N_pred      = Predictions.size
-        forecast    = Predictions[ (N_pred - args.Tp) : N_pred ]
-        Predictions = np.roll( Predictions, args.Tp )
-        Predictions = np.append( Predictions, forecast )
+        forecast    = Predictions[ (N_pred - args.Tp) : N_pred ] # End values
+        Predictions = np.roll( Predictions, args.Tp )    # Shift by Tp
+        Predictions = np.append( Predictions, forecast ) # Append end values
         Predictions[ 0 : args.Tp ] = np.nan # Insert NaN for missing data
 
         # Extend Observations and insert NaN 
         Observations = np.append( Observations, np.full( args.Tp, np.nan ) )
+
+        # Extend and shift Smap coefficients, insert nan at beginning
+        if 'smap' in args.method.lower() :
+            forecast_Coeff = Coeff[ (N_pred - args.Tp) : N_pred, : ]
+            Coeff          = np.roll( Coeff, args.Tp, axis = 0 )
+            Coeff          = np.append( Coeff, forecast_Coeff, axis = 0 )
+            Coeff[ 0 : args.Tp, : ] = np.full( Coeff.shape[1], np.nan )
+
+            if len( args.jacobians ):
+                # Extend and shift Smap Jacobians, insert nan at beginning
+                forecast_Jacob = Jacobians[ (N_pred - args.Tp) : N_pred, : ]
+                Jacobians      = np.roll( Jacobians, args.Tp, axis = 0 )
+                Jacobians      = np.append(Jacobians, forecast_Jacob, axis = 0)
+                Jacobians[0 : args.Tp, :] = np.full(Jacobians.shape[1], np.nan)
 
     # Combine into one matrix, create header and write output
     output = np.stack( ( Time, Observations, Predictions ), axis = -1 )
@@ -166,6 +186,26 @@ def Prediction( embedding, colNames, target, args ):
         np.savetxt( args.path + args.outputFile, output, fmt = '%.4f',
                     delimiter = ',', header = header, comments = '' )
 
+    smap_output = None
+    if args.outputSmapFile and 'smap' in args.method.lower() :
+        # Combine Time, Coeff into one matrix, create header 
+        smap_output = np.hstack( ( Time.reshape(( Time.shape[0], 1 )), Coeff ) )
+        coef_header = 'Time,'
+        for col in range( args.E + 1 ): # C0,C1,C2,...
+            coef_header = coef_header + ( 'C{:d},'.format( col ) )
+        
+        if len( args.jacobians ) :
+            # Append jacobian columns to smap_output
+            smap_output = np.hstack( ( smap_output, Jacobians ) )
+            for pair in args.jacobians :
+                coef_header = coef_header + \
+                              ( '∂C{:d}/∂C{:d},'.format( pair[0], pair[1] ) )
+
+        coef_header = coef_header[ 0 : -1 ] # remove trailing ,
+        
+        np.savetxt( args.path + args.outputSmapFile, smap_output, fmt = '%.4f',
+                    delimiter = ',', header = coef_header, comments = '' )
+            
     # Estimate correlation coefficient on observed : predicted data
     rho, r, rmse, mae = ComputeError( Observations, Predictions )
 
@@ -217,11 +257,9 @@ def Prediction( embedding, colNames, target, args ):
                                       figsize = ( args.figureSize[0],
                                                   args.figureSize[0] ),
                                       dpi = 150 )
-
-            Time_coeff = Time[ 0 : len( Time ) - args.Tp ]
             
             for f in range( args.E + 1 ) :
-                ax2[f].plot( Time_coeff , Coeff[ :, f],
+                ax2[f].plot( Time, Coeff[ :, f ],
                              label = 'S-Map Coefficients_{0:d}'.format(f),
                              linewidth = 2, color = plotColors[f] )
             
@@ -234,20 +272,62 @@ def Prediction( embedding, colNames, target, args ):
                                    '  E=' + str( args.E  ) +\
                                    ' Tp=' + str( args.Tp ) +\
                                   r' $\rho$=' + str( round( rho, 3 ) ) )
+
+            #-------------------------------------------------------
+            # Plot S-Map jacobians
+            if len( args.jacobians ) :
+                fig3, ax3 = plt.subplots( nrows = len( args.jacobians ),
+                                          ncols = 1, sharex = True,
+                                          figsize = ( args.figureSize[0],
+                                                      args.figureSize[0] ),
+                                          dpi = 150 )
+                
+                for f in range( len( args.jacobians ) ) :
+                    pair = args.jacobians[ f ]
+                    ax3[f].plot( Time, Jacobians[ :, f ],
+                                 label='S-Map ∂C{:d}/∂C{:d}'.format( pair[0],
+                                                                     pair[1] ),
+                                 linewidth = 2, color = plotColors[f] )
+            
+                    ax3[f].legend()
+
+                ax3[ len( args.jacobians ) - 1 ].set( xlabel = args.plotXLabel )
+            
+                ax3[ 0 ].set( ylabel = args.plotYLabel,
+                              title  = args.inputFile +\
+                              '  E=' + str( args.E  ) +\
+                              ' Tp=' + str( args.Tp ) +\
+                              r' $\rho$=' + str( round( rho, 3 ) ) )
+                
         plt.show()
 
-    return ( rho, rmse, mae, header, output )
+    return ( rho, rmse, mae, header, output, smap_output )
 
 #----------------------------------------------------------------------------
 # 
 #----------------------------------------------------------------------------
 def SMapProjection( libraryMatrix, predictMatrix, target,
-                    neighbors, distances, args):
+                    neighbors, distances, args ):
     '''
+    Sequential Locally Weighted Global Linear Maps.
+
     Each row of neighbors, distances corresponds to one prediction vector.
     S-Map prediction requires k_NN > E + 1, default is all neighbors.
-   '''
-    
+
+    !!! Note that the linear decomposition and projection is over 1 : E
+    columns of the predictMatrix: The coefficient matrix A has dimension
+    ( k_NN, E + 1 ). 
+
+    Therefore, SMapProjection() should be called with libraryMatrix and
+    predictMatrix that have columns explicity correspondng to dimensions E.
+    This means that if a multivariate data set is used, it should Not be
+    called with an embedding from EmbedData() since EmbedData() will add
+    lagged coordinates for each variable.  These extra columns will then
+    not correspond to the intended dimensions in the matrix inversion and
+    prediction reconstruction.  In this case, use the -e (embedded) flag
+    so that the -c (columns) selected correspond to the proper dimension.
+    '''
+
     library_N_row = nRow( libraryMatrix ) # Observation Library subset
     predict_N_row = nRow( predictMatrix ) # Prediction  Library subset
     N_row         = nRow( neighbors )     # Prediction k_NN list
@@ -258,6 +338,7 @@ def SMapProjection( libraryMatrix, predictMatrix, target,
     min_weight   = 1E-6
     predictions  = np.zeros( N_row )
     coefficients = np.full( ( N_row, args.E + 1 ), np.nan )
+    jacobians    = None
 
     for row in range( N_row ) :
         
@@ -271,7 +352,9 @@ def SMapProjection( libraryMatrix, predictMatrix, target,
 
         A = np.zeros( ( args.k_NN, args.E + 1 ) )
         B = np.zeros( args.k_NN )
-        
+
+        # Populate matrix A (exp weighted future prediction), and
+        # vector B (target BC's) for this row (observation).
         for k in range( args.k_NN ) :
             lib_row = neighbors[ row, k ] + args.Tp
             
@@ -281,36 +364,91 @@ def SMapProjection( libraryMatrix, predictMatrix, target,
                            " lib_row " + str( lib_row ) + " exceeds library." )
                 # JP: Ignore this neighbor with a nan? There will be no pred.
                 # B[k] = np.nan
-                # Or, use the neighbor at the 'base' of the trajectory
+                # Or: use the neighbor at the 'base' of the trajectory
                 B[k] = target[ lib_row - args.Tp ]
 
             else:
                 B[k] = target[ lib_row ]
 
+            A[ k, 0 ] = w[k]
             for j in range( 1, args.E + 1 ) :
                 A[ k, j ] = w[k] * predictMatrix[ row, j ]
 
-            A[ k, 0 ] = w[k]
-
         B = w * B
         
-        # numpy least squares approximation
-        C, residual, rank, sv = lstsq( A, B, rcond = None )
+        if args.SVDLeastSquares:
+            # SVD least squares
+            C = SVD( A, B, args )
+        else:
+            # numpy least squares approximation
+            C, residual, rank, sv = lstsq( A, B, rcond = 1E-6 )
 
         # Prediction is local linear projection
-        prediction = C[ 0 ]
-
+        prediction = C[ 0 ] # Note that C[ 0 ] is the bias term
+                            # predictMatrix[ row, 0 ] is Time
         for e in range( 1, args.E + 1 ) :
             prediction = prediction + C[ e ] * predictMatrix[ row, e ]
 
         predictions [ row ]    = prediction
         coefficients[ row, : ] = C
 
+    #----------------------------------------------------------
+    # Jacobians
+    #----------------------------------------------------------
+    if len( args.jacobians ) :
+        # Partial derivatives of S-Map coefficients
+        # args.jacobians is a list of pairs of smap coeff column indices
+        # index 0 refers to the smap bias term, smap coeff from 1 to E + 1
+        # are the coefficients for the prediction data/embedding columns
+
+        # Note that args.jacobians is a list of pairs (tuples)
+        jacobians = np.zeros( ( N_row, len( args.jacobians ) ) )
+        
+        for pair, col in zip( args.jacobians, range( len(args.jacobians) ) ) :
+            # gradient over axis = 1, columns
+            jacobians[ :, col ] = np.gradient( coefficients[ :, pair ],
+                                               axis = 1 )[ :, 0]
+
     if args.Debug:
         print( "SMapProjection() predictions:" )
         print( np.round( predictions[ 0:10 ], 4 ) )
+        print( "SMapProjection() jacobians:" )
+        if args.jacobians:
+            print( np.round( jacobians  [ 0:5, : ], 4 ) )
 
-    return ( predictions, coefficients )
+    return ( predictions, coefficients, jacobians )
+    
+#----------------------------------------------------------------------------
+#
+#----------------------------------------------------------------------------
+def SVD( A, b, args ) :
+    '''
+    SVD factorization of Ax = b to estimate x : x ← V S_inv U' b
+    '''
+
+    # Note: numpy.linalg.svd returns v.T rather than v
+    u, s, vT = svd( A )
+
+    S0 = s[ 0 ] # s : singular values sorted in descending order
+    
+    S_inv = np.zeros( A.shape )
+
+    for i in range( nCol( A ) ) :
+        if s[ i ] >= args.SVDSignificance * S0 :
+            S_inv[ i, i ] = 1 / s[ i ]
+
+    # x ← V S_inv (U' b)
+    #------------------------------------------------
+    # The non-communitivity of matrix multiplication should mean that:
+    #   V S_inv (U' b) != V (U' b) S_inv ... ?
+
+    C = np.matmul( vT.T, np.dot( np.dot( u.T, b ), S_inv ) )
+
+    if args.Debug:
+        print( ' SVD C ---------------' )
+        print( C )
+    
+    return C
     
 #----------------------------------------------------------------------------
 # 
@@ -730,6 +868,12 @@ def EmbedData( args ):
     If time delays are used then the top Δi rows are deleted, if forward
     times (-f --forwardTau) are specified, then bottom rows are deleted.
 
+    Note that the embedding matrix columns are processed according to
+    the order listed in the -c (columns) argument list.  They are appended
+    to the embedding matrix in that order along with the specified 
+    number of lag dimensions.  If -c x y -E 2 then the embedding has
+    columns: x(t-0), x(t-1), y(t-0), y(t-1)
+
     args 
     -E  E            Max embedding dimension, data will be embedded 1:E
     -u  tau          Time delay (tau) in rows.
@@ -779,23 +923,35 @@ def EmbedData( args ):
     csv_head = csv_head.split(',')
     csv_head = [ h.strip() for h in csv_head ]
 
+    if not ( 'time' in csv_head[0].lower() or \
+             'year' in csv_head[0].lower() ) :
+        raise RuntimeError( 'EmbedData() Time or Year not found in ' +\
+                            'first column of ' + args.inputFile )
+
     # Dictionary of column index : label from inputFile
     D = { key:value for value, key in enumerate( csv_head ) }
 
     # Get target data vector if requested (-r)
     target = None
     if args.target :
-        if args.target not in D.keys() :
-            raise RuntimeError( "EmbedData() Failed to find target " +\
-                                args.target + " in " + args.inputFile)
-
+        i_targetColumn = None
+        
+        if args.target.isdigit():
+            i_targetColumn = int( args.target )
+        else :
+            if args.target not in D.keys() :
+                raise RuntimeError( "EmbedData() Failed to find target " +\
+                                    args.target + " in " + args.inputFile )
+        
+            i_targetColumn = D[ args.target ]
+        
         delta_row = (args.E - 1) * args.tau
         if args.forwardTau :
             # Ignore bottom delta_row
-            target = data[ 0:(N_row - delta_row), D[ args.target ] ]
+            target = data[ 0:(N_row - delta_row), i_targetColumn ]
         else :
             # Ignore the top delta_row
-            target = data[ delta_row:N_row, D[ args.target ] ]
+            target = data[ delta_row:N_row, i_targetColumn ]
             
     header = ['Time,'] # Output header
     
@@ -818,7 +974,7 @@ def EmbedData( args ):
             # Find the matching data column name and associated index
             if embedColumn not in D.keys() :
                 raise RuntimeError( "EmbedData() Failed to find column " +\
-                                    embedColumn + " in " + args.inputFile)
+                                    embedColumn + " in " + args.inputFile )
             
             i_embedColumn = D[ embedColumn ]
     

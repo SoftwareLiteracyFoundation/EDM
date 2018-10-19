@@ -105,8 +105,9 @@ def PredictFunc( argsEmbedding ) :
     colNames  = argsEmbedding[ 2 ]
     target    = argsEmbedding[ 3 ]
     
-    rho, rmse, mae, header, output = Prediction( embedding, colNames,
-                                                 target, args )
+    rho, rmse, mae, header, output, smap_output = Prediction( embedding,
+                                                              colNames,
+                                                              target, args )
 
     return tuple( ( args.theta, round( rho, 4 ) ) )
         

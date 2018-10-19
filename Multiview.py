@@ -245,8 +245,9 @@ def EvalLib( argsList ) :
     embed = np.take( embedding, (0,) + combo, axis = 1 )
     
     # Evaluate prediction skill
-    rho, rmse, mae, header, output = Prediction( embed, colNames,
-                                                 target, args )
+    rho, rmse, mae, header, output, smap_output = Prediction( embed,
+                                                              colNames,
+                                                              target, args )
     
     return tuple( ( combo, round( rho, 5 ) ) )
 
@@ -270,8 +271,9 @@ def EvalPred( argsList ) :
     Names = [ colNames[i] for i in combo ]
     
     # Evaluate prediction skill
-    rho, rmse, mae, header, output = Prediction( embed, colNames,
-                                                 target, args )
+    rho, rmse, mae, header, output, smap_output = Prediction( embed,
+                                                              colNames,
+                                                              target, args )
     
     Result = { 'names' : Names,  'rho'    : rho,
                'rmse'  : rmse,   'mae'    : mae,

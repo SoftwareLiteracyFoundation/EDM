@@ -4,6 +4,11 @@ from argparse import ArgumentParser
 #----------------------------------------------------------------------------
 #----------------------------------------------------------------------------
 def ParseCmdLine():
+    '''
+    nargs = '*' All command-line args are gathered into a list.
+    nargs = '+' All command-line args are gathered into a list, and,
+                an error message generated if not at least one argument.
+    '''
     
     parser = ArgumentParser( description = 'EDM' )
     
@@ -41,6 +46,21 @@ def ParseCmdLine():
                         dest   = 'theta', type = float, 
                         action = 'store', default = 0,
                         help = 'S-Map local weighting exponent (0 default).')
+
+    parser.add_argument('-j', '--jacobians', nargs = '+',
+                        dest   = 'jacobians',
+                        action = 'store', default = [],
+                        help = 'S-Map Jacobian columns, list of pairs.')
+
+    parser.add_argument('-svd', '--SVDLeastSquares',
+                        dest   = 'SVDLeastSquares',
+                        action = 'store_true', default = False,
+                        help = 'Use SVD least squares in S-Map.')
+    
+    parser.add_argument('-sig', '--SVDSignificance',
+                        dest   = 'SVDSignificance', type = float, 
+                        action = 'store', default = 0.00001,
+                        help = 'S-Map SVD significance (10^-5 default).')
 
     parser.add_argument('-M', '--multiview',
                         dest   = 'multiview', type = int, 
@@ -108,6 +128,11 @@ def ParseCmdLine():
                         action = 'store',      default = None,
                         help = 'Output prediction file.')
     
+    parser.add_argument('-os', '--outputSmapFile',
+                        dest   = 'outputSmapFile', type = str, 
+                        action = 'store',      default = None,
+                        help = 'S-map Output file.')
+    
     parser.add_argument('-oe', '--outputEmbed',
                         dest   = 'outputEmbed', type = str, 
                         action = 'store',      default = None,
@@ -156,12 +181,34 @@ def ParseCmdLine():
     args = parser.parse_args()
 
     # If S-Map prediction, require k_NN > E + 1, default is all neighbors.
-    # If Simplex and k_NN not specified, k_NN set to E+1 in Prediction()
-    if "smap" in args.method.lower() and args.k_NN > 0:
-        if args.k_NN <= args.E :
-            raise RuntimeError( "ParseCmdLine() k_NN must be at least E+1 " +\
-                                " with method SMap." )
-        
+    # If Simplex and k_NN not specified, k_NN is set to E+1 in Prediction()
+    if "smap" in args.method.lower() :
+        if args.k_NN > 0:
+            if args.k_NN <= args.E :
+                raise RuntimeError( "ParseCmdLine() k_NN must be at least " +\
+                                    " E+1 with method S-Map." )
+        if  not args.embedded and len( args.columns ) > 1 :
+            print( "ParseCmdLine() WARNING:  Multivariable S-Map should use" +\
+                   " -e (embedded) data input to ensure data/dimension" +\
+                   " correspondance." )
+
+        # S-Map coefficient columns for jacobians start at 1 since the 0th
+        # column is the S-Map linear prediction bias term
+        if len( args.jacobians ) :
+            if "0" in args.jacobians :            
+                raise RuntimeError( "ParseCmdLine() S-Map coefficient columns"+\
+                                    " for jacobians can not use column 0." )
+
+        # Must be pairs of coefficient columns
+        if len( args.jacobians ) % 2 :
+            raise RuntimeError( "ParseCmdLine() S-Map coefficient columns " +\
+                                "for jacobians must be in pairs." )
+
+        # Convert args.jacobians into a list of int pairs (tuples)
+        args.jacobians = [ ( int( args.jacobians[i]     ),
+                             int( args.jacobians[i + 1] ) )
+                           for i in range( 0, len( args.jacobians ), 2 ) ]
+
     # Convert library and prediction indices to zero-offset
     args.prediction = [ x-1 for x in args.prediction ]
     args.library    = [ x-1 for x in args.library    ]

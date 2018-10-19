@@ -8,18 +8,18 @@ from EDM      import EmbedData, ReadEmbeddedData, Prediction
 #----------------------------------------------------------------------------
 def Predict():
     '''
-    Wrapper for Precition() in EMD.py, performs:
+    Data input/embedding wrapper for Prediction() in EMD.py to compute:
 
       Simplex projection of observational data (Sugihara, 1990), or
       SMap    projection of observational data (Sugihara, 1994).
 
     There are two options for data input. One is to use the -c (columns)
     argument so that the -i (inputFile) will be considered a timeseries with 
-    embedding performed by EmbedData().  The other is to not use -e where
+    embedding performed by EmbedData().  The other is to use -e where
     the -i (inputFile) specifies a .csv file with an embedding or
     multivariable data frame. This will be read by ReadEmbeddedData().
 
-    If ReadEmbeddedData() is used (-e not specified) then input data 
+    If ReadEmbeddedData() is used (-e specified) then input data 
     consist of a .csv file formatted as:
        [ Time, Dim_1, Dim_2, ... ] 
     where Dim_1 is observed data, Dim_2 data offset by τ, Dim_3 by 2τ...
@@ -39,18 +39,18 @@ def Predict():
     
     args = ParseCmdLine()
 
-    if not args.embedded :
-        # args.inputFile are timeseries data to be embedded by EmbedData
-        embedding, colNames, target = EmbedData( args )
-    else :
+    if args.embedded :
         # The args.inputFile is an embedding or multivariable data frame.
         # ReadEmbeddedData() sets args.E to the number of columns
         # if the -c (columns) and -t (target) options are used.
         embedding, colNames, target = ReadEmbeddedData( args )
+    else :
+        # args.inputFile are timeseries data to be embedded by EmbedData
+        embedding, colNames, target = EmbedData( args )
 
-    rho, rmse, mae, header, output = Prediction( embedding, colNames,
-                                                 target, args )
-    
+    rho, rmse, mae, header, output, smap_output = Prediction( embedding,
+                                                              colNames,
+                                                              target, args )
 
 #----------------------------------------------------------------------------
 # Provide for cmd line invocation and clean module loading.

@@ -101,9 +101,9 @@ def EmbedPredict( args ):
         # -e not specified, embed on each iteration
         embedding, colNames, target = EmbedData( args )
         
-    rho, rmse, mae, header, output = Prediction( embedding, colNames,
-                                                 target, args )
-
+    rho, rmse, mae, header, output, smap_output = Prediction( embedding,
+                                                              colNames,
+                                                              target, args )
     return tuple( ( args.E, round( rho, 3 ) ) )
 
     
