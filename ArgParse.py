@@ -62,6 +62,12 @@ def ParseCmdLine():
                         action = 'store', default = 0.00001,
                         help = 'S-Map SVD significance (10^-5 default).')
 
+    parser.add_argument('-tr', '--TikhonovAlpha', 
+                        dest   = 'TikhonovAlpha', type = float,
+                        action = 'store', default = None,
+                        help = 'Tikhonov regularisation initial alpha in ' +\
+                               'S-Map SVD.')
+    
     parser.add_argument('-M', '--multiview',
                         dest   = 'multiview', type = int, 
                         action = 'store', default = 0,

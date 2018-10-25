@@ -5,6 +5,7 @@ from collections import OrderedDict
 # Community modules
 import numpy as np
 from   numpy.linalg     import norm, lstsq, svd
+from   scipy.optimize   import minimize
 from   matplotlib.dates import datestr2num, num2date
 import matplotlib.pyplot as plt
 
@@ -377,8 +378,11 @@ def SMapProjection( libraryMatrix, predictMatrix, target,
         B = w * B
         
         if args.SVDLeastSquares:
-            # SVD least squares
-            C = SVD( A, B, args )
+            if args.TikhonovAlpha:
+                C = SVD_Tikhonov( A, B, w, args )
+            else:
+                # SVD least squares
+                C = SVD( A, B, args )
         else:
             # numpy least squares approximation
             C, residual, rank, sv = lstsq( A, B, rcond = 1E-6 )
@@ -421,13 +425,89 @@ def SMapProjection( libraryMatrix, predictMatrix, target,
 #----------------------------------------------------------------------------
 #
 #----------------------------------------------------------------------------
+def SVD_Tikhonov( A, b, w, args ) :
+    '''
+    SVD factorization of Ax = b to estimate x : x ← V S_inv U' b
+    with Tikhonov regularisation (ridge regression). 
+
+    The Tikhonov parameter (alpha) is determined by minimization of
+    the function F_alpha(). The starting estimate is specified by
+    the -tr (args.TikhonovAlpha) parameter.  Specify -v (verbose) to
+    observe parameter values on the console. 
+    '''
+
+    # Tikhonov regularized solution
+    # Find optimal alpha for regularization
+    alpha = minimize( F_alpha, args.TikhonovAlpha,
+                      args = ( A, b, w, args.E ),
+                      method = 'nelder-mead' )
+
+    if args.Debug:
+        print( 'SVD_Tikhonov() alpha result = ', alpha )
+        
+    elif args.verbose :
+        print( 'SVD_Tikhonov() {:} N = {:d}, alpha = {:}'.format(
+            alpha.success, alpha.nit, alpha.x  ) )
+
+    # Note: numpy.linalg.svd returns v.T rather than v
+    u, s, vT = svd( A ) # full_matrices = True
+
+    S0 = s[ 0 ] # s : singular values sorted in descending order
+    
+    S_inv = np.zeros( A.shape )
+
+    for i in range( nCol( A ) ) :
+        if s[ i ] >= args.SVDSignificance * S0 :
+            s_i = s[ i ]
+            S_inv[ i, i ] = s_i / ( s_i**2 + alpha.x**2 )
+
+    # x ← V S_inv (U' b)
+    C = np.matmul( vT.T, np.dot( np.dot( u.T, b ), S_inv ) )
+
+    if args.Debug:
+        print( ' SVD_Tikhonov C --------' )
+        print( C )
+    
+    return C
+    
+#----------------------------------------------------------------------------
+#
+#----------------------------------------------------------------------------
+def F_alpha( alpha, A, b, w, E ) :
+    '''
+    Estimate Tikhonov regularization alpha parameter by minimization
+    of the residual sum of squares RSS^2 over τ^2 where τ is the effective 
+    number of degrees of freedom. (Equal to E?)
+    '''
+
+    u, s, vT = svd( A, full_matrices = False )
+    
+    alpha_sqr = alpha**2
+    aubu      = 0
+    ubu       = 0
+    
+    for col in range( len( s ) ) :
+        u_i   = u[ :, col ]
+        ubu_i = np.dot( u_i * b, u_i )
+        ubu   = ubu  + ubu_i
+        aubu  = aubu + ( alpha_sqr / (s[col]**2 + alpha_sqr) ) * ubu_i
+
+    y   = b[0]/w[0]
+    RSS = (abs(y - ubu))**2 + (abs(aubu))**2
+    tau = E**2  # Might as well be 1
+    
+    return RSS/tau
+
+#----------------------------------------------------------------------------
+#
+#----------------------------------------------------------------------------
 def SVD( A, b, args ) :
     '''
     SVD factorization of Ax = b to estimate x : x ← V S_inv U' b
     '''
 
     # Note: numpy.linalg.svd returns v.T rather than v
-    u, s, vT = svd( A )
+    u, s, vT = svd( A ) # full_matrices = True
 
     S0 = s[ 0 ] # s : singular values sorted in descending order
     
@@ -441,7 +521,6 @@ def SVD( A, b, args ) :
     #------------------------------------------------
     # The non-communitivity of matrix multiplication should mean that:
     #   V S_inv (U' b) != V (U' b) S_inv ... ?
-
     C = np.matmul( vT.T, np.dot( np.dot( u.T, b ), S_inv ) )
 
     if args.Debug:
