@@ -1,4 +1,3 @@
-
 # Python distribution modules
 from collections import OrderedDict
 
@@ -132,10 +131,10 @@ def Prediction( embedding, colNames, target, args ):
                    " dimensions of " + args.inputFile + " Tp=" +\
                    str( args.Tp ) + " θ=" + str( args.theta ) )
         
-        Predictions, Coeff, Jacobians = SMapProjection( libraryMatrix,
-                                                        predictionMatrix,
-                                                        target, neighbors,
-                                                        distances, args )
+        Predictions, Coeff, Jacobians, Tangents = \
+            SMapProjection( libraryMatrix, predictionMatrix,
+                            target, neighbors,
+                            distances, args )
 
     else :
         raise RuntimeError( "Prediction() Invalid projection method: ",
@@ -179,6 +178,12 @@ def Prediction( embedding, colNames, target, args ):
                 Jacobians      = np.append(Jacobians, forecast_Jacob, axis = 0)
                 Jacobians[0 : args.Tp, :] = np.full(Jacobians.shape[1], np.nan)
 
+                forecast_Tangents = Tangents[ (N_pred - args.Tp) : N_pred, : ]
+                Tangents          = np.roll( Tangents, args.Tp, axis = 0 )
+                Tangents          = np.append( Tangents, forecast_Tangents,
+                                               axis = 0)
+                Tangents[0 : args.Tp, :] = np.full(Tangents.shape[1], np.nan)
+
     # Combine into one matrix, create header and write output
     output = np.stack( ( Time, Observations, Predictions ), axis = -1 )
     header = 'Time,Data,Prediction_t(+{0:d})'.format( args.Tp )
@@ -189,18 +194,29 @@ def Prediction( embedding, colNames, target, args ):
 
     smap_output = None
     if args.outputSmapFile and 'smap' in args.method.lower() :
-        # Combine Time, Coeff into one matrix, create header 
+        # Combine Time, Coeff into one matrix
         smap_output = np.hstack( ( Time.reshape(( Time.shape[0], 1 )), Coeff ) )
+        
+        # Create .csv file header
         coef_header = 'Time,'
         for col in range( args.E + 1 ): # C0,C1,C2,...
             coef_header = coef_header + ( 'C{:d},'.format( col ) )
         
         if len( args.jacobians ) :
-            # Append jacobian columns to smap_output
-            smap_output = np.hstack( ( smap_output, Jacobians ) )
+            # Append jacobian and tangent columns to smap_output
+            smap_output = np.hstack( ( smap_output, Jacobians, Tangents ) )
+            
+            # Append Jacobian labels to header
             for pair in args.jacobians :
                 coef_header = coef_header + \
                               ( '∂C{:d}/∂C{:d},'.format( pair[0], pair[1] ) )
+            # Append Tangents labels to header
+            for pair in args.jacobians :
+                coef_header = coef_header + \
+                  ( 'C{:d}(∂/∂C{:d})+C{:d}(∂/∂C{:d}),'.format( pair[0],
+                                                               pair[0],
+                                                               pair[1],
+                                                               pair[1] ) )
 
         coef_header = coef_header[ 0 : -1 ] # remove trailing ,
         
@@ -252,7 +268,7 @@ def Prediction( embedding, colNames, target, args ):
             plotColors = [ 'blue', 'green', 'red', 'magenta', 'brown', 'black',
                 'darkblue', 'darkgreen', 'darkred', 'olive', 'orange', 'gray' ]
             
-            # Note that ax2 is an array of length nrows
+            # Note that ax2 is an array of length args.E + 1
             fig2, ax2 = plt.subplots( nrows = args.E + 1, ncols = 1,
                                       sharex = True,
                                       figsize = ( args.figureSize[0],
@@ -260,6 +276,10 @@ def Prediction( embedding, colNames, target, args ):
                                       dpi = 150 )
             
             for f in range( args.E + 1 ) :
+                # JP: scientific notation on coefficient y axis
+                ax2[f].ticklabel_format( axis = 'y', style = 'sci',
+                                         scilimits=(0,0) )
+                
                 ax2[f].plot( Time, Coeff[ :, f ],
                              label = 'S-Map Coefficients_{0:d}'.format(f),
                              linewidth = 2, color = plotColors[f] )
@@ -272,32 +292,46 @@ def Prediction( embedding, colNames, target, args ):
                           title  = args.inputFile +\
                                    '  E=' + str( args.E  ) +\
                                    ' Tp=' + str( args.Tp ) +\
+                                  r' $\theta$=' + str( args.theta ) +\
                                   r' $\rho$=' + str( round( rho, 3 ) ) )
 
             #-------------------------------------------------------
-            # Plot S-Map jacobians
+            # Plot S-Map Jacobians and Tangents
             if len( args.jacobians ) :
-                fig3, ax3 = plt.subplots( nrows = len( args.jacobians ),
+                # Note that ax3 is an array of len(args.jacobians) * 2
+                nJacobians = len(args.jacobians)
+                fig3, ax3 = plt.subplots( nrows = nJacobians * 2,
                                           ncols = 1, sharex = True,
                                           figsize = ( args.figureSize[0],
                                                       args.figureSize[0] ),
                                           dpi = 150 )
-                
-                for f in range( len( args.jacobians ) ) :
-                    pair = args.jacobians[ f ]
-                    ax3[f].plot( Time, Jacobians[ :, f ],
-                                 label='S-Map ∂C{:d}/∂C{:d}'.format( pair[0],
-                                                                     pair[1] ),
+
+                for i, f in zip( range( nJacobians ),
+                                 range( 0, nJacobians * 2, 2 ) ) :
+                    pair = args.jacobians[ i ]
+                        
+                    ax3[f].plot( Time, Jacobians[ :, i ],
+                                 label='S-Map ∂C{:d}/∂C{:d}'.format(pair[0],
+                                                                    pair[1]),
                                  linewidth = 2, color = plotColors[f] )
-            
+                        
+                    ax3[f].set_ylim([-10, 10])
                     ax3[f].legend()
 
-                ax3[ len( args.jacobians ) - 1 ].set( xlabel = args.plotXLabel )
+                    ax3[f+1].plot( Time, Tangents[ :, i ],
+                        label='C{:d}(∂/∂C{:d})+C{:d}(∂/∂C{:d}),'.format(
+                        pair[0], pair[0], pair[1], pair[1] ),
+                                   linewidth = 2, color = plotColors[f] )
+
+                    ax3[f+1].legend()
+
+                ax3[ nJacobians * 2 - 1 ].set( xlabel = args.plotXLabel )
             
                 ax3[ 0 ].set( ylabel = args.plotYLabel,
                               title  = args.inputFile +\
                               '  E=' + str( args.E  ) +\
                               ' Tp=' + str( args.Tp ) +\
+                              r' $\theta$=' + str( args.theta ) +\
                               r' $\rho$=' + str( round( rho, 3 ) ) )
                 
         plt.show()
@@ -340,6 +374,7 @@ def SMapProjection( libraryMatrix, predictMatrix, target,
     predictions  = np.zeros( N_row )
     coefficients = np.full( ( N_row, args.E + 1 ), np.nan )
     jacobians    = None
+    tangents     = None
 
     for row in range( N_row ) :
         
@@ -407,11 +442,19 @@ def SMapProjection( libraryMatrix, predictMatrix, target,
 
         # Note that args.jacobians is a list of pairs (tuples)
         jacobians = np.zeros( ( N_row, len( args.jacobians ) ) )
+        tangents  = np.zeros( ( N_row, len( args.jacobians ) ) )
         
         for pair, col in zip( args.jacobians, range( len(args.jacobians) ) ) :
-            # gradient over axis = 1, columns
-            jacobians[ :, col ] = np.gradient( coefficients[ :, pair ],
-                                               axis = 1 )[ :, 0]
+            c1 = coefficients[ :, pair[0] ]
+            c2 = coefficients[ :, pair[1] ]
+
+            # Jacobians
+            dc1 = np.gradient( c1 )
+            dc2 = np.gradient( c2 )
+            jacobians[ :, col ] = dc1 / dc2
+
+            # Directional Derivatives (manifold tangent)
+            tangents[ :, col ] = c1 * dc1  + c2 * dc2
 
     if args.Debug:
         print( "SMapProjection() predictions:" )
@@ -420,7 +463,7 @@ def SMapProjection( libraryMatrix, predictMatrix, target,
         if args.jacobians:
             print( np.round( jacobians  [ 0:5, : ], 4 ) )
 
-    return ( predictions, coefficients, jacobians )
+    return ( predictions, coefficients, jacobians, tangents )
     
 #----------------------------------------------------------------------------
 #

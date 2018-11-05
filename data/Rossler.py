@@ -11,39 +11,18 @@ import numpy as np
 #----------------------------------------------------------------------------
 def main():
     '''
-    Create, plot and write out multidimensional data from the Lorenz '96
+    Create, plot and write out multidimensional data from the Rossler
     dynamical model.
 
-    From Lorenz '96:
-
-    N variables k=1, ... N, governed by N equations:
-           d X_k / dt = -X_k-2 * X_k-1 + X_k-1 * X_k+1 - X_k + F
-                      = (X_k+1 - X_k-2) * X_k-1 - X_k + F
-
-    We assume N > 3; the dynamics are of little interest otherwise.
-
-    For very small values of F, all solutions converge to the steady state
-    solution X = F. For larger F most solutions are periodic, but for still
-    larger values of F (dependent on K) chaos ensues. For N = 36 and F = 8
-    λ_1 corresponds to a doubling time of 2.1 days. If F is 10 the time drops
-    to 1.5 days. ... this scaling makes time unit equal to 5 days. With a
-    time step of Δt = 0.05 units, or 6 hours. 
-
-    --
-    Lorenz, Edward (1996). Predictability – A problem partly solved,
-    Seminar on Predictability, Vol. I, ECMWF
-
-    http://www.math.colostate.edu/~gerhard/MATH540/FILES/
-    Karimi2010_ChaosInLorenz96.pdf
     '''
     
     args = ParseCmdLine()
     
-    Lorenz96( args )
+    Rossler( args )
     
 #----------------------------------------------------------------------------
 #----------------------------------------------------------------------------
-def Lorenz96( args ):
+def Rossler( args ):
     '''
     Use scipy.integrate.odeint() to integrate the differential equation.
 
@@ -53,27 +32,24 @@ def Lorenz96( args ):
     and even with that: I could not get it to work... Nice. 
     '''
     
-    # initial state (equilibrium)
-    v0 = args.forceConstant * np.ones( args.nVariables )
-
-    v0[ args.i_perturb ] += args.perturb # add small perturbation
+    # initial state
+    v0 = np.array( args.initial )
 
     t = np.arange( 0.0, args.T, args.dT )
 
     # odeint requires "extra" variables to be in a tuple with name matching
     # inside the derivative function, so make N, F explicit
-    N = args.nVariables
-    F = args.forceConstant
-    V = odeint( dLorenz96, v0, t, args = (N, F) )
+    a, b, c = args.constants
+    V = odeint( dRossler, v0, t, args = (a,b,c) )
 
     # Compute and store the derivatives
     dVdt      = np.zeros( V.shape )
     dVdt_cols = range( dVdt.shape[1] )
 
     for row in range( 0, dVdt.shape[0] ):
-        # State variable derivatives dV/dt directly from Lorenz96()
+        # State variable derivatives dV/dt directly from dRossler()
         # using the integrated value at each timestep as the v0
-        dVdt[ row, dVdt_cols ] = dLorenz96( V[ row, dVdt_cols ], 0, N, F )
+        dVdt[ row, dVdt_cols ] = dRossler( V[ row, dVdt_cols ], 0, a,b,c )
 
     if len( args.jacobians ) :
         # Note that args.jacobians is a list of pairs (tuples)
@@ -85,19 +61,15 @@ def Lorenz96( args ):
             jacobians[ :, col ] = d1 / d2
 
     # Create output matrix
-    # get index of starting point to exclude transient start
-    exclude = int( np.where( t == args.exclude )[0] )
-    
     # t is an array, first cast as matrix and transpose to merge with x & dVdt
     output = np.concatenate( (np.asmatrix( t ).T, V, dVdt), 1 )
     if len( args.jacobians ) :
         output = np.concatenate( (output, jacobians), 1 )
-    output = output[ exclude::, ]
 
     if args.outputFile:
         # Create the header
         header = 'Time'
-        for dim in range( args.nVariables ) :
+        for dim in range( len( v0 ) ) :
             header = header + ',V' + str( dim + 1 )
         for dim in dVdt_cols :
             header = header + ',dV' + str( dim + 1 ) + '/dt'
@@ -116,9 +88,9 @@ def Lorenz96( args ):
       fig3D = plt.figure()
       ax3D  = fig3D.gca(projection='3d')
       
-      ax3D.plot( V[ exclude::, args.dimensions[0] ],
-                 V[ exclude::, args.dimensions[1] ],
-                 V[ exclude::, args.dimensions[2] ] )
+      ax3D.plot( V[ :, args.dimensions[0] ],
+                 V[ :, args.dimensions[1] ],
+                 V[ :, args.dimensions[2] ] )
       
       ax3D.set_xlabel( '$x_{0:d}$'.format( args.dimensions[0] ) )
       ax3D.set_ylabel( '$x_{0:d}$'.format( args.dimensions[1] ) )
@@ -139,80 +111,58 @@ def Lorenz96( args ):
 
       ax.set( xlabel = 'index ()',
               ylabel = 'amplitude ()',
-              title  = 'Lorenz 96' )
+              title  = 'Rossler' )
       plt.show()
 
 #----------------------------------------------------------------------------
 #  State derivatives
-#  Relies on Python array wrapping for negative/overflow indicies
 #----------------------------------------------------------------------------
-def dLorenz96( v, t, N, F ):
+def dRossler( v, t, a, b, c ):
     '''
-    N variables k=1, ... N, governed by N equations:
-           d X_k / dt = (X_k+1 - X_k-2) * X_k-1 - X_k + F
-    Assume N > 3
+    dx/dt = -y - z
+    dy/dt =  x + ay
+    dz/dt =  b + z(x-c)
     '''
-    dv = np.zeros(N)
-
-    # first the 3 edge cases: i=1,2,N
-    dv[0]   = (v[1] - v[N-2]) * v[N-1] - v[0]
-    dv[1]   = (v[2] - v[N-1]) * v[0]   - v[1]
-    dv[N-1] = (v[0] - v[N-3]) * v[N-2] - v[N-1]
+    dv = np.zeros( len( v ) )
+    x,y,z = v
     
-    # then the general case
-    for i in range(2, N-1):
-        dv[i] = (v[i+1] - v[i-2]) * v[i-1] - v[i]
-
-    # add the forcing term
-    dv = dv + F
-
+    # 
+    dv[0] = -y - z
+    dv[1] =  x + a*y  
+    dv[2] =  b + z*(x-c)
+    
     return dv
 
 #----------------------------------------------------------------------------
 #----------------------------------------------------------------------------
 def ParseCmdLine():
     
-    parser = ArgumentParser( description = 'Lorenz 96' )
+    parser = ArgumentParser( description = 'Rossler' )
     
-    parser.add_argument('-D', '--nVariables',
-                        dest   = 'nVariables', type = int, 
-                        action = 'store',     default = 5,
-                        help = 'Number of variables.')
-    
+    parser.add_argument('-i', '--initial', nargs = '+',
+                        dest   = 'initial', type = float,
+                        action = 'store', default = [1, 0, 1],
+                        help = 'Initial state values.')
+
+    parser.add_argument('-c', '--constants', nargs = '+',
+                        dest   = 'constants', type = float,
+                        action = 'store', default = [0.2, 0.2, 5.7],
+                        help = 'Constants a, b, c.')
+
     parser.add_argument('-j', '--jacobians', nargs = '+',
                         dest   = 'jacobians',
                         action = 'store', default = [],
                         help = 'Variable Jacobian columns, list of pairs.')
 
-    parser.add_argument('-f', '--forceConstant',
-                        dest   = 'forceConstant', type = int, 
-                        action = 'store',      default = 8,
-                        help = 'Forcing constant.')
-
-    parser.add_argument('-p', '--perturb',
-                        dest   = 'perturb', type = float, 
-                        action = 'store',      default = 0.01,
-                        help = 'Pertubation value.')
-
-    parser.add_argument('-i', '--iPerturb',
-                        dest   = 'i_perturb', type = int, 
-                        action = 'store',      default = 3,
-                        help = 'Pertubation index.')
-
     parser.add_argument('-T', '--T',
                         dest   = 'T', type = float, 
-                        action = 'store',      default = 60.,
+                        action = 'store',      default = 100.,
                         help = 'Max time.')
 
     parser.add_argument('-t', '--dT',
                         dest   = 'dT', type = float, 
-                        action = 'store',      default = 0.05,
+                        action = 'store',      default = 0.025,
                         help = 'Time increment.')
-
-    parser.add_argument('-x', '--exclude',
-                        dest   = 'exclude', type = float, 
-                        action = 'store',      default = 10.,
-                        help = 'Initial transient time to exclude.')
 
     parser.add_argument('-o', '--outputFile',
                         dest   = 'outputFile', type = str, 
@@ -233,10 +183,6 @@ def ParseCmdLine():
 
     # Zero offset dimensions
     args.dimensions = [ d-1 for d in args.dimensions ]
-
-    if args.i_perturb >= args.nVariables :
-        print( "i_perturb > D, setting to 1" )
-        args.i_perturb = 1
 
     if len( args.jacobians ) :
         # Must be pairs of coefficient columns
