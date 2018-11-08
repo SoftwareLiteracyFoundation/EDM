@@ -50,10 +50,10 @@ Evaluate S-map localization parameter in a 2-dimensional embedding on tent map d
 
 
 ### Multivariable S-map prediction
-Multivariable S-map prediction on three-species data from [rEDM](https://cran.r-project.org/web/packages/rEDM/vignettes/rEDM-tutorial.html).  This corresponds to the rEDM block_lnlp() functionality. 
+Multivariable S-map prediction on three-species data from [rEDM](https://cran.r-project.org/web/packages/rEDM/vignettes/rEDM-tutorial.html).  This corresponds to the rEDM block_lnlp() functionality. Multivariable S-map should always use -e (embedded) and -c (columns) to ensure that library and prediction matrix columns correspond to the E dimensions used in the linear decomposition and projection. One can limit k_NN to assess different prediction dynamic range and accuracy. 
 ```
-./Predict.py -i block_3sp.csv -m smap -r x_t -c x_t y_t z_t
--E 3 -l 1 99 -p 100 198 -T 1 -t 2 -P
+./Predict.py -e -i block_3sp.csv -m smap -r x_t -c x_t y_t z_t
+-l 1 99 -p 100 198 -T 1 -t 2 -P
 ```
 ![Predict.py example](./doc/MultivariableTentMap.png)
 ![Predict.py example](./doc/MultivariableTentMap_Coeff.png)
