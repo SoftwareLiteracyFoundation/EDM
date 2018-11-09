@@ -628,7 +628,7 @@ def SimplexProjection( libraryMatrix, target,
                 # x = 0
                 # Or, use the neighbor at the 'base' of the trajectory
                 x = target[ lib_row - args.Tp ]
-
+                
             else :
                 # The unlagged library data value in target
                 x = target[ lib_row ]
@@ -709,6 +709,12 @@ def FindNeighbors( libraryMatrix, predictionMatrix, args ) :
                     print( 'FindNeighbors(): ignoring degenerate lib_row ',
                            str( lib_row ), ' and pred_row ', str( pred_row ) )
                 continue
+
+            # If this lib_row + args.Tp >= library_N_row, then this neighbor
+            # would be outside the library, keep looking if limitNeighbors
+            if lib_row + args.Tp >= library_N_row :
+                if args.limitNeighbors :
+                    continue
             
             # Find distance between the prediction vector (y)
             # and each of the library vectors
