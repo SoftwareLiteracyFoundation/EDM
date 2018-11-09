@@ -395,12 +395,13 @@ def SMapProjection( libraryMatrix, predictMatrix, target,
             lib_row = neighbors[ row, k ] + args.Tp
             
             if lib_row >= library_N_row:
+                # The k_NN index + Tp is outside the library domain
+                # Can only happen if -N (--limitNeighbors) is used.
                 if args.warnings:
                     print( "SMapProjection() in row " + str( row ) +\
                            " lib_row " + str( lib_row ) + " exceeds library." )
-                # JP: Ignore this neighbor with a nan? There will be no pred.
-                # B[k] = np.nan
-                # Or: use the neighbor at the 'base' of the trajectory
+                    
+                # Use the neighbor at the 'base' of the trajectory
                 B[k] = target[ lib_row - args.Tp ]
 
             else:
@@ -620,13 +621,12 @@ def SimplexProjection( libraryMatrix, target,
             
             if lib_row >= library_N_row:
                 # The k_NN index + Tp is outside the library domain
+                # Can only happen if -N (--limitNeighbors) is used.
                 if args.warnings:
                     print( "SimplexProjection() in row " + str( row ) +\
                            " lib_row " + str( lib_row ) + " exceeds library." )
                     
-                # JP: Ignore this neighbor?
-                # x = 0
-                # Or, use the neighbor at the 'base' of the trajectory
+                # Use the neighbor at the 'base' of the trajectory
                 x = target[ lib_row - args.Tp ]
                 
             else :
