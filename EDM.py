@@ -108,7 +108,14 @@ def Prediction( embedding, colNames, target, args ):
                    " for SimplexProjection." )
             
         elif "smap" in args.method.lower():
-            args.k_NN = libraryMatrix.shape[0]
+            # If args.noNeighborLimit = False (the default) then the number
+            # of neighbors has to be Tp less than the number of library rows.
+            # If noNeighborLimit = True (-N), then k_NN can equal the number
+            # of library rows.
+            if args.noNeighborLimit :
+                args.k_NN = libraryMatrix.shape[0]
+            else :
+                args.k_NN = libraryMatrix.shape[0] - args.Tp
             print( "Prediction() Set k_NN = " + str( args.k_NN ) +\
                    " for SMapProjection." )
 
@@ -396,7 +403,7 @@ def SMapProjection( libraryMatrix, predictMatrix, target,
             
             if lib_row >= library_N_row:
                 # The k_NN index + Tp is outside the library domain
-                # Can only happen if -N (--limitNeighbors) is used.
+                # Can only happen if -N (--noNeighborLimit = True) is used.
                 if args.warnings:
                     print( "SMapProjection() in row " + str( row ) +\
                            " lib_row " + str( lib_row ) + " exceeds library." )
@@ -589,18 +596,16 @@ def SimplexProjection( libraryMatrix, target,
     if N_row != nRow( distances ) :
         raise RuntimeError( "SimplexProjection() Neighbor row mismatch." )
 
-    min_weight = 1E-6
-    N_weight   = nCol( neighbors )
-    
+    min_weight  = 1E-6
     predictions = np.zeros( N_row )
-        
+    
     for row in range( N_row ) :
 
-        # Compute weight (vector) for each k_NN
-        # Establish the exponential weight reference, the 'distance scale'
+        # Establish exponential weight reference, the 'distance scale'
         min_distance = np.amin( distances[ row, : ] )
-
-        w = np.full( N_weight, min_distance )
+        
+        # Compute weight (vector) for each k_NN        
+        w = np.full( args.k_NN, min_distance )
 
         if min_distance == 0 :
             i_zero = np.where( w == 0 )
@@ -609,11 +614,9 @@ def SimplexProjection( libraryMatrix, target,
         else :
             w = np.fmax( np.exp( -distances[ row, : ] / min_distance ),
                          min_weight )
-            
-        w_sum = np.sum( w )
-        
-        # Prediction vector, one element for each weighted k_NN
-        y = np.zeros( args.k_NN )
+
+        # target library vector, one element for each weighted k_NN
+        x = np.zeros( args.k_NN )
         
         for k in range( args.k_NN ) :
 
@@ -621,22 +624,20 @@ def SimplexProjection( libraryMatrix, target,
             
             if lib_row >= library_N_row:
                 # The k_NN index + Tp is outside the library domain
-                # Can only happen if -N (--limitNeighbors) is used.
+                # Can only happen if -N (--noNeighborLimit = True) is used.
                 if args.warnings:
                     print( "SimplexProjection() in row " + str( row ) +\
                            " lib_row " + str( lib_row ) + " exceeds library." )
                     
                 # Use the neighbor at the 'base' of the trajectory
-                x = target[ lib_row - args.Tp ]
+                x[k] = target[ lib_row - args.Tp ]
                 
             else :
                 # The unlagged library data value in target
-                x = target[ lib_row ]
-
-            y[k] = w[k] * x
+                x[k] = target[ lib_row ]
 
         # Prediction is average of weighted library projections
-        predictions[ row ] = np.sum( y ) / w_sum
+        predictions[ row ] = np.sum( w * x ) / np.sum( w )        
 
     if args.Debug:
         print( "SimplexProjection()" )
@@ -711,9 +712,9 @@ def FindNeighbors( libraryMatrix, predictionMatrix, args ) :
                 continue
 
             # If this lib_row + args.Tp >= library_N_row, then this neighbor
-            # would be outside the library, keep looking if limitNeighbors
+            # would be outside the library, keep looking if noNeighborLimit
             if lib_row + args.Tp >= library_N_row :
-                if args.limitNeighbors :
+                if not args.noNeighborLimit :
                     continue
             
             # Find distance between the prediction vector (y)

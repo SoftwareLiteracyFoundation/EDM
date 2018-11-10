@@ -37,9 +37,9 @@ def ParseCmdLine():
                         action = 'store', default = -1,
                         help = 'Number of nearest neighbors.')
 
-    parser.add_argument('-N', '--limitNeighbors',
-                        dest   = 'limitNeighbors',
-                        action = 'store_false', default = True,
+    parser.add_argument('-N', '--noNeighborLimit',
+                        dest   = 'noNeighborLimit',
+                        action = 'store_true', default = False,
                         help = "Don't limit neighbors based on Tp." )
 
     parser.add_argument('-T', '--Tp',
