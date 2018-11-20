@@ -377,7 +377,6 @@ def SMapProjection( libraryMatrix, predictMatrix, target,
     if N_row != nRow( distances ) :
         raise RuntimeError( "SMapProjection() Input row dimension mismatch." )
 
-    min_weight   = 1E-6
     predictions  = np.zeros( N_row )
     coefficients = np.full( ( N_row, args.E + 1 ), np.nan )
     jacobians    = None
@@ -601,22 +600,35 @@ def SimplexProjection( libraryMatrix, target,
     
     for row in range( N_row ) :
 
-        # Establish exponential weight reference, the 'distance scale'
-        min_distance = np.amin( distances[ row, : ] )
-        
-        # Compute weight (vector) for each k_NN        
-        w = np.full( args.k_NN, min_distance )
+        distance_row = distances[ row, : ]
 
+        # Establish exponential weight reference, the 'distance scale'
+        min_distance = np.amin( distance_row )
+        
+        # Compute weights (vector) for each k_NN
         if min_distance == 0 :
-            i_zero = np.where( w == 0 )
+            weighted_distances = np.full( args.k_NN, min_weight )
+            
+            i_dist = np.where( distance_row >  0 )
+            i_zero = np.where( distance_row == 0 )
+
+            if np.size( i_dist ) :
+                weighted_distances[i_dist] = np.exp( -distance_row[ i_dist ] /
+                                                     min_distance )
+            
             if np.size( i_zero ) :
-                w[ i_zero ] = 1
+                # Setting weight = 1 implies that the corresponding
+                # library target vector is the same as the observation
+                # so it will be given full-weight in the prediction.
+                weighted_distances[ i_zero ] = 1
+
         else :
-            w = np.fmax( np.exp( -distances[ row, : ] / min_distance ),
-                         min_weight )
+            weighted_distances = np.exp( -distance_row / min_distance )
+            
+        weights = np.fmax( weighted_distances, min_weight )
 
         # target library vector, one element for each weighted k_NN
-        x = np.zeros( args.k_NN )
+        lib_target = np.zeros( args.k_NN )
         
         for k in range( args.k_NN ) :
 
@@ -630,14 +642,14 @@ def SimplexProjection( libraryMatrix, target,
                            " lib_row " + str( lib_row ) + " exceeds library." )
                     
                 # Use the neighbor at the 'base' of the trajectory
-                x[k] = target[ lib_row - args.Tp ]
+                lib_target[k] = target[ lib_row - args.Tp ]
                 
             else :
                 # The unlagged library data value in target
-                x[k] = target[ lib_row ]
+                lib_target[k] = target[ lib_row ]
 
         # Prediction is average of weighted library projections
-        predictions[ row ] = np.sum( w * x ) / np.sum( w )        
+        predictions[ row ] = np.sum( weights * lib_target ) / np.sum( weights )
 
     if args.Debug:
         print( "SimplexProjection()" )
