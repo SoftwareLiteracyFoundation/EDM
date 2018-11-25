@@ -1186,7 +1186,7 @@ def EmbedData( args ):
 
     # Format header list into a string for savetxt 
     # and Header list with the trailing ',' stripped
-    header_str = ''.join(header)
+    header_str = ''.join(header)[ 0 : -1 ] # join and remove trailing ,
     Header     = [ h[0:len(h)-1] for h in header ]
 
     if args.Debug:
