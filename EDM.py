@@ -787,8 +787,9 @@ def ReadEmbeddedData( args ):
     '''
     Read a .csv formatted time-delay embedding from EmbedData(), 
     or a .csv file that has multiple columns of observational data.
-    The first column is required to be the "time" variable. It can be
-    a numeric, or an ISO datetime string "YYYY-mm-dd". 
+
+    !!! The first column is required to be the "time" variable.
+    It can be numeric, or an ISO datetime string "YYYY-mm-dd". 
 
     Check that args.prediction and args.library ranges are available.
 
@@ -828,6 +829,10 @@ def ReadEmbeddedData( args ):
         raise
 
     N_row, N_col = csv_matrix.shape
+
+    if N_col < 2 :
+        raise RuntimeError( 'ReadEmbeddedData() at least two columns ' +\
+                            ' required: [time, data] in ' + args.inputFile )
     
     # Parse the header [ Time, Dim_1, Dim_2, ... ]
     csv_head = ''
@@ -836,10 +841,6 @@ def ReadEmbeddedData( args ):
 
     csv_head = csv_head.split(',')
     csv_head = [ h.strip() for h in csv_head ]
-
-    if 'time' not in csv_head[0].lower() :
-        raise RuntimeError( 'ReadEmbeddedData() Time not found in ' +\
-                            'first column of ' + args.inputFile )
 
     # Validate requested range of prediction and library
     if args.prediction[0] < 0 or args.prediction[0] > N_row :
@@ -986,9 +987,13 @@ def EmbedData( args ):
     '''
     Reads args.inputFile assumed to be .csv format with a single header
     line and at least two columns: "time" in column i=0, and data values 
-    in args.columns.  Time can be a numeric, or an ISO datetime string 
-    "YYYY-mm-dd".  Writes the time-delayed (or time-advanced if -f 
-    --forwardTau) embedding to args.outputFile (if specified).
+    in args.columns.  
+
+    !!! The first column is required to be the "time" variable.
+    It can be numeric, or an ISO datetime string "YYYY-mm-dd". 
+
+    Writes the time-delayed (or time-advanced if -f --forwardTau) 
+    embedding to args.outputFile (if specified).
 
     Returns a tuple with embedded matrix, header list (column names)
     and library target vector.  The target vector will be None if -r 
@@ -1050,7 +1055,8 @@ def EmbedData( args ):
     N_row, N_col = data.shape
 
     if N_col < 2 :
-        raise RuntimeError( "EmbedData() at least 2 columns required." )
+        raise RuntimeError( "EmbedData() at least 2 columns required: " +\
+                            "[time, data] in " + args.inputFile )
     
     print( "EmbedData() Read " + str( N_row ) + " rows " +\
            str( N_col ) + " columns from " + args.inputFile +\
@@ -1063,11 +1069,6 @@ def EmbedData( args ):
 
     csv_head = csv_head.split(',')
     csv_head = [ h.strip() for h in csv_head ]
-
-    if not ( 'time' in csv_head[0].lower() or \
-             'year' in csv_head[0].lower() ) :
-        raise RuntimeError( 'EmbedData() Time or Year not found in ' +\
-                            'first column of ' + args.inputFile )
 
     # Dictionary of column index : label from inputFile
     D = { key:value for value, key in enumerate( csv_head ) }
