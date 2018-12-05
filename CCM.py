@@ -74,12 +74,8 @@ def CCM():
     args.target  = target
     args.columns = columns
     
-    # map_async() : A variant of the map() method that returns a result object
-    # of class multiprocessing.pool.AsyncResult
-    poolResults = pool.map_async( CrossMap, argsList )
-
-    # Must call AsyncResult.get() to spawn/wait for map_async() results
-    results = poolResults.get()
+    # Submit the CrossMap jobs to the process pool
+    results = pool.map( CrossMap, argsList )
 
     R0 = results[ 0 ] # tuple ( ID, PredictLibStats{} )
     R1 = results[ 1 ] # tuple ( ID, PredictLibStats{} )

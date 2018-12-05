@@ -60,12 +60,8 @@ def SMapNL():
         # Add the embedding, colNames, target in a tuple
         argsEmbeddingList.append( ( newArgs, embedding, colNames, target ) )
 
-    # map_async() : A variant of the map() method that returns a result object
-    # of class multiprocessing.pool.AsyncResult
-    poolResults = pool.map_async( PredictFunc, argsEmbeddingList )
-
-    # Must call AsyncResult.get() to spawn/wait for map_async() results
-    results = poolResults.get()
+    # Submit PredictFunc jobs to the process pool
+    results = pool.map( PredictFunc, argsEmbeddingList )
     
     # Dict to hold theta : rho pairs from PredictFunc() tuple
     theta_rho = OrderedDict()

@@ -99,12 +99,8 @@ def Multiview():
     for combo in combos :
         argList.append( ( args, combo, embedding, colNames, target ) )
     
-    # map_async() : A variant of the map() method that returns a result object
-    # of class multiprocessing.pool.AsyncResult
-    poolResults = pool.map_async( EvalLib, argList )
-
-    # Must call AsyncResult.get() to spawn/wait for map_async() results
-    results = poolResults.get()
+    # Submit EvalLib jobs to the process pool
+    results = pool.map( EvalLib, argList )
     
     # Dict to hold combos : rho pairs from EvalLib() tuple
     Combo_rho = {}
@@ -137,12 +133,8 @@ def Multiview():
     for combo in combo_sort[ 0: args.multiview ] :
         argList.append( ( args, combo, embedding, colNames, target ) )
     
-    # map_async() : A variant of the map() method that returns a result object
-    # of class multiprocessing.pool.AsyncResult
-    poolResults = pool.map_async( EvalPred, argList )
-
-    # Must call AsyncResult.get() to spawn/wait for map_async() results
-    results = poolResults.get()
+    # Submit EvalPred jobs to the process pool
+    results = pool.map( EvalPred, argList )
     
     Results = OrderedDict() # Dictionary of dictionaries results each combo
 

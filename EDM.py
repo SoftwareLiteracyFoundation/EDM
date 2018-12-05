@@ -818,7 +818,11 @@ def ReadEmbeddedData( args ):
                                  delimiter = ',', skiprows = 1 )
     except ValueError as err:
         if 'could not convert string to float' in str( err ):
-            # Try with date conversion on first (j=0) column
+            # Try with date conversion on first (j=0) column.
+            # datestr2num() is not documented, it seems to be a wrapper
+            # for matplotlib.dates.date2num(d), where d = datetime.datetime.
+            # Returns: Number of days (fraction represents hours, minutes,
+            # seconds, ms) since 0001-01-01 00:00:00 UTC, plus one.
             csv_matrix = np.loadtxt( args.path + args.inputFile,
                                      delimiter = ',', skiprows = 1,
                                      converters = { 0 : datestr2num },
@@ -1042,7 +1046,11 @@ def EmbedData( args ):
                            delimiter = ',', skiprows = 1 )
     except ValueError as err:
         if 'could not convert string to float' in str( err ):
-            # Try with date conversion on first (j=0) column
+            # Try with date conversion on first (j=0) column.
+            # datestr2num() is not documented, it seems to be a wrapper
+            # for matplotlib.dates.date2num(d), where d = datetime.datetime.
+            # Returns: Number of days (fraction represents hours, minutes,
+            # seconds, ms) since 0001-01-01 00:00:00 UTC, plus one.
             data = np.loadtxt( args.path + args.inputFile,
                                delimiter = ',', skiprows = 1,
                                converters = { 0 : datestr2num },

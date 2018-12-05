@@ -45,12 +45,8 @@ def EmbedDimension():
         newArgs.k_NN = E + 1
         argsList.append( newArgs )
 
-    # map_async() : A variant of the map() method that returns a result object
-    # of class multiprocessing.pool.AsyncResult
-    poolResults = pool.map_async( EmbedPredict, argsList )
-
-    # Must call AsyncResult.get() to spawn/wait for map_async() results
-    results = poolResults.get()
+    # Submit EmbedPredict jobs to the process pool
+    results = pool.map( EmbedPredict, argsList )
     
     E_rho = {} # Dict to hold E : rho pairs from EmbedPredict() tuple
 
