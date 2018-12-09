@@ -104,8 +104,10 @@ def Prediction( embedding, colNames, target, args ):
     if args.k_NN < 0 :
         if "simplex" in args.method.lower():
             args.k_NN = args.E + 1
-            print( "Prediction() Set k_NN to E + 1 = " + str( args.k_NN ) +\
-                   " for SimplexProjection." )
+            
+            if args.verbose:
+                print( "Prediction() Set k_NN to E + 1 = " + str( args.k_NN ) +\
+                       " for SimplexProjection." )
             
         elif "smap" in args.method.lower():
             # If args.noNeighborLimit = False (the default) then the number
@@ -116,8 +118,10 @@ def Prediction( embedding, colNames, target, args ):
                 args.k_NN = libraryMatrix.shape[0]
             else :
                 args.k_NN = libraryMatrix.shape[0] - args.Tp
-            print( "Prediction() Set k_NN = " + str( args.k_NN ) +\
-                   " for SMapProjection." )
+                
+            if args.verbose:
+                print( "Prediction() Set k_NN = " + str( args.k_NN ) +\
+                       " for SMapProjection." )
 
     neighbors, distances = FindNeighbors( libraryMatrix,
                                           predictionMatrix, args )
@@ -887,10 +891,11 @@ def ReadEmbeddedData( args ):
             print( csv_head[ 0:E_col ] )
             print( np.round( csv_matrix[ range( 5 ), 0:E_col ], 4 ) )
 
-        print( "ReadEmbeddedData() columns selected from E+1: " +\
-               str( N_row ) + " rows "  +\
-               str( N_col ) + " columns from " + args.inputFile +\
-               "  Returning " + str( E_col ) + " columns (E+1)." )
+        if args.verbose:
+            print( "ReadEmbeddedData() columns selected from E+1: " +\
+                   str( N_row ) + " rows "  +\
+                   str( N_col ) + " columns from " + args.inputFile +\
+                   "  Returning " + str( E_col ) + " columns (E+1)." )
 
         embedding = csv_matrix[ :, 0:E_col ]
         header    = csv_head  [    0:E_col ]
@@ -913,10 +918,11 @@ def ReadEmbeddedData( args ):
                                                range( 5 ), axis = 0 ),
                                       columns_i, axis = 1 ), 4 ) )
 
-        print( "ReadEmbeddedData() columns selected from -c -t indices : " +\
-               str( N_row ) + " rows " +\
-               str( N_col ) + " columns from " + args.inputFile +\
-               "  Returning " + str( args.E + 1 ) + " columns (E+1)." )
+        if args.verbose:
+            print( "ReadEmbeddedData() columns selected from -c -t indices : "+\
+                   str( N_row ) + " rows " +\
+                   str( N_col ) + " columns from " + args.inputFile +\
+                   "  Returning " + str( args.E + 1 ) + " columns (E+1)." )
 
         embedding = np.take( csv_matrix, columns_i, 1 )
         header    = np.take( csv_head,   columns_i    )
@@ -962,10 +968,11 @@ def ReadEmbeddedData( args ):
                                                range( 5 ), axis = 0 ),
                                       columns_i, axis = 1 ), 4 ) )
 
-        print( "ReadEmbeddedData() columns selected from -c -t names:" +\
-               str( N_row ) + " rows " +\
-               str( N_col ) + " columns from " + args.inputFile +\
-               "  Returning " + str( args.E + 1 ) + " columns (E+1)." )
+        if args.verbose:
+            print( "ReadEmbeddedData() columns selected from -c -t names:" +\
+                   str( N_row ) + " rows " +\
+                   str( N_col ) + " columns from " + args.inputFile +\
+                   "  Returning " + str( args.E + 1 ) + " columns (E+1)." )
 
         embedding = np.take( csv_matrix, columns_i, 1 )
         header    = np.take( csv_head,   columns_i    )
@@ -1065,10 +1072,10 @@ def EmbedData( args ):
     if N_col < 2 :
         raise RuntimeError( "EmbedData() at least 2 columns required: " +\
                             "[time, data] in " + args.inputFile )
-    
-    print( "EmbedData() Read " + str( N_row ) + " rows " +\
-           str( N_col ) + " columns from " + args.inputFile +\
-           " Data columns: " + str( args.columns ) )
+    if args.verbose :
+        print( "EmbedData() Read " + str( N_row ) + " rows " +\
+               str( N_col ) + " columns from " + args.inputFile +\
+               " Data columns: " + str( args.columns ) )
 
     # Parse the header [ Time, Dim_1, Dim_2, ... ]
     csv_head = ''

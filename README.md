@@ -12,15 +12,18 @@ Functionality includes:
 File|Type|Description
 ----|----|-----------
 ArgParse.py       |Module    | Command line parser
-CCM.py            |Executable| Convergent Cross Mapping
-Embed.py          |Executable| Wrapper for EmbedData()
+EDM.py            |Module    | Simplex, S-map and embedding functions
+Methods.py        |Module    | Applications
+Embed.py          |Executable| Wrapper for Methods.EmbedData()
+Predict.py        |Executable| Wrapper for EDM.Prediction()
 PredictDecay.py   |Executable| Evaluate Tp from 1 to 10
 SMapNL.py         |Executable| Evaluate θ from 0.01 to 9
-EDM.py            |Module    | Simplex, S-map and embedding functions
 EmbedDimension.py |Executable| Evaluate embeddings with E from 1 to 10
 Multiview.py      |Executable| Multiview embedding
-Predict.py        |Executable| Wrapper for Prediction()
+CCM.py            |Executable| Convergent Cross Mapping
 Test.py           |Executable| Test suite
+notebooks/        |          |
+Jupyter.py        |Module    | Interface to IPython/Jupyter
 
 ### Embedding dimension (E) vs prediction skill (ρ)
 Evaluate simplex embedding dimensions from E = 1 to 10 on tent map data from [rEDM](https://cran.r-project.org/web/packages/rEDM/vignettes/rEDM-tutorial.html).

@@ -129,7 +129,7 @@ def ParseCmdLine():
                         action = 'store',      default = './data/',
                         help = 'Input & Output file path.')
 
-    parser.add_argument('-i', '--inputFile', required = True,
+    parser.add_argument('-i', '--inputFile',
                         dest   = 'inputFile', type = str, 
                         action = 'store',     default = None,
                         help = 'Input observation file.')
@@ -151,8 +151,8 @@ def ParseCmdLine():
     
     parser.add_argument('-fs', '--figureSize', nargs = 2,
                         dest   = 'figureSize', type = float,
-                        action = 'store', default = [ 6.4, 4 ],
-                        help = 'Figure size (default [6.4, 4]).')
+                        action = 'store', default = [ 5, 3 ],
+                        help = 'Figure size (default [5, 3]).')
     
     parser.add_argument('-P', '--plot',
                         dest   = 'plot',
@@ -191,6 +191,21 @@ def ParseCmdLine():
     
     args = parser.parse_args()
 
+    AdjustArgs( args )
+
+    if args.Debug:
+        print( 'ParseCmdLine()' )
+        print( args )
+
+    return args
+
+#----------------------------------------------------------------------------
+#----------------------------------------------------------------------------
+def AdjustArgs( args ):
+    '''
+    Index offsets and validation. 
+    '''
+    
     # If S-Map prediction, require k_NN > E + 1, default is all neighbors.
     # If Simplex and k_NN not specified, k_NN is set to E+1 in Prediction()
     if "smap" in args.method.lower() :
@@ -231,9 +246,3 @@ def ParseCmdLine():
 
     # Convert figureSize to a tuple
     args.figureSize = tuple( args.figureSize )
-
-    if args.Debug:
-        print( 'ParseCmdLine()' )
-        print( args )
-
-    return args
