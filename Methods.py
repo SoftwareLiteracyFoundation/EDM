@@ -106,7 +106,7 @@ def Embed( args, data = None, colNames = None, source = Source.Python ):
     embedding, header, target = EmbedData( args, data, colNames )
 
     if args.Debug:
-        print( "Embed() " + ' '.join( args.embedColumns ) +\
+        print( "Embed() " + ' '.join( args.columns ) +\
                " from " + args.inputFile +\
                " E=" + str( args.E ) + " " +\
                str( embedding.shape[0] ) + " rows,  " +\
