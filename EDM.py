@@ -459,24 +459,25 @@ def SMapProjection( libraryMatrix, predictMatrix, target, const_target,
         # Populate matrix A (exp weighted future prediction), and
         # vector B (target BC's) for this row (observation).
         for k in range( args.k_NN ) :
-            lib_row = neighbors[ row, k ] + args.Tp
+            libRowBase = neighbors[ row, k ]
+            libRow     = libRowBase + args.Tp;
             
-            if lib_row >= library_N_row:
+            if libRow >= library_N_row:
                 # The k_NN index + Tp is outside the library domain
                 # Can only happen if -N (--noNeighborLimit = True) is used.
                 if args.warnings:
                     print( "SMapProjection() in row " + str( row ) +\
-                           " lib_row " + str( lib_row ) + " exceeds library." )
-                    
+                           " libRow " + str( libRow ) + " exceeds library." )
+
                 # Use the neighbor at the 'base' of the trajectory
-                B[k] = target[ lib_row - args.Tp ]
+                B[k] = target[ libRow - args.Tp ]
 
             else:
-                B[k] = target[ lib_row ]
+                B[k] = target[ libRow ]
 
             A[ k, 0 ] = w[k]
             for j in range( 1, args.E + 1 ) :
-                A[ k, j ] = w[k] * libraryMatrix[ lib_row - args.Tp, j ]
+                A[ k, j ] = w[k] * libraryMatrix[ libRowBase, j ]
 
         B = w * B
 
