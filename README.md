@@ -1,6 +1,8 @@
 ## Empirical Dynamic Modeling (EDM)
 ---
-A Python implementation of EDM tools providing functionality similar to the R implementation [rEDM](https://cran.r-project.org/web/packages/rEDM/index.html) by Ye et. al. See the [rEDM vignette](https://cran.r-project.org/web/packages/rEDM/vignettes/rEDM-tutorial.html) for a lucid introduction to EDM. 
+A Pure Python implementation of EDM tools intended for code and algorithm development.  Production EDM tools are in [cppEDM](https://github.com/SugiharaLab/cppEDM).  The Python [EDM package](https://github.com/SugiharaLab/pyEDM) provides a Pandas DataFrame interface to cppEDM. 
+
+Functionality is similar to the R implementation [rEDM](https://cran.r-project.org/web/packages/rEDM/index.html) by Ye et. al. See the [rEDM vignette](https://cran.r-project.org/web/packages/rEDM/vignettes/rEDM-tutorial.html) for a lucid introduction to EDM. 
 
 Functionality includes:
 * Simplex projection (Sugihara and May 1990)
@@ -80,8 +82,7 @@ Multivariable S-map prediction on three-species data from [rEDM](https://cran.r-
 ### Multiview ensemble simplex prediction
 Multiview simplex prediction on three-species data from [rEDM](https://cran.r-project.org/web/packages/rEDM/vignettes/rEDM-tutorial.html).  This corresponds to the rEDM multiview() functionality.
 ```
-./Multiview.py -i block_3sp.csv -E 3 -r x_t -c x_t y_t z_t 
--l 1 100 -p 101 200 -T 1 -P
+./Multiview.py -i block_3sp.csv -E 3 -r x_t -c x_t y_t z_t -l 1 100 -p 101 200 -T 1 -P
 ```
 ![Multiview.py example](./doc/MultiviewTentMap.png)
 
@@ -89,13 +90,13 @@ Multiview simplex prediction on three-species data from [rEDM](https://cran.r-pr
 ### Convergent cross mapping
 Convergent cross mapping on anchovy and sea surface temperature data from [rEDM](https://cran.r-project.org/web/packages/rEDM/vignettes/rEDM-tutorial.html).  This corresponds to the rEDM ccm() functionality.
 ```
-./CCM.py -i sardine_anchovy_sst.csv -c anchovy -r np_sst -E 3 -s 100 -L 10 80 10 -R -P
+./CCM.py -i sardine_anchovy_sst.csv -c anchovy -r np_sst -E 3 -s 100 -L 7 75 5 -R -P
 ```
 ![CCM.py example](./doc/CCM.png)
 
 ---
 ## Command line arguments
-pyEDM is coded in a functional paradigm for ease of understanding and use.  One exception is the command line argument parser.  The Python `ArgumentParser` class from the `argparse` module is used with all parameters stored in a namespace object: `args`.
+devEDM is coded in a functional paradigm for ease of understanding and use.  One exception is the command line argument parser.  The Python `ArgumentParser` class from the `argparse` module is used with all parameters stored in a namespace object: `args`.
 
 Command line options for `Embed.py Predict.py EmbedDimension.py PredictDecay.py SMapNL.py Multiview.py CCM.py`:
 
@@ -107,12 +108,13 @@ Option|Long Option       |Description
   -l  | --library        | Library start/stop indices.
   -E  | --EmbedDimension | Embedding dimension.
   -k  | --knn            | Number of nearest neighbors.
-  -N  | --noNeighborLimit| Don't limit neighbors based on Tp.
   -T  | --Tp             | Forecast interval (0 default).
   -t  | --theta          | S-Map local weighting exponent (0 default).
-  -j  | --jacobians      | S-Map Jacobian columns, list of pairs.
+  -x  | --exclusionRadius| Prediction vector exclusion radius (0 rows default).
+  -N  | --noNeighborLimit| Don't limit neighbors based on Tp.
   -svd| --SVDLeastSquares| Use SVD least squares in S-Map.
   -sig| --SVDSignificance| S-Map SVD significance (10^-5 default).
+  -H  | --hessians       | S-Map Hessian and tangent columns, list of pairs.
   -tr | --TikhonovAlpha  | Tikhonov regularisation initial alpha in S-Map SVD.
   -en | --ElasticNetAlpha| Elastic Net alpha in S-Map.
   -M  | --multiview      | Multiview ensemble size (sqrt(m) default).
@@ -123,8 +125,9 @@ Option|Long Option       |Description
   -e  | --embedded       | Input data is an embedding.
   -L  | --libsize        | CCM Library size range [start, stop, incr].
   -s  | --subsample      | Number subsamples generated at each library.
-  -R  | --randomLib      | CCM random library samples enabled.
-  -S  | --seed           | CCM Random number generator seed: (None default).
+  -R  | --randomLib      | CCM random library samples enabled (False default).
+  -rp | --replacement    | CCM random samples with replacement (False default).
+  -S  | --seed           | CCM Random number generator seed (None default).
   -pa | --path           | Input & Output file path.
   -i  | --inputFile      | Input observation file.
   -o  | --outputFile     | Output prediction file.
@@ -132,6 +135,7 @@ Option|Long Option       |Description
   -oe | --outputEmbed    | Output embedded data file.
   -fs | --figureSize     | Figure size (default [5, 3]).
   -P  | --plot           | Show plot(s).
+  -PT | --plotTitle      | Plot title.
   -PX | --plotXLabel     | Plot x-axis label.
   -PY | --plotYLabel     | Plot y-axis label.
   -PD | --plotDate       | Time values are pyplot datetime numbers.
@@ -142,6 +146,6 @@ Option|Long Option       |Description
 
 ---
 ## Notes
-SMapProjection() should be called with libraryMatrix and predictMatrix that have columns explicity correspondng to dimensions E. This means that if a multivariate data set is used, it should Not be called with an embedding from EmbedData() since EmbedData() will add lagged coordinates for each variable.  These extra columns will then not correspond to the intended dimensions in the matrix inversion and prediction reconstruction.  In this case, use the -e (embedded) flag so that the -c (columns) selected correspond to the proper dimension.
+SMapProjection() should be called with libraryMatrix and predictMatrix that have columns explicity correspondng to dimensions E. This means that if a multivariate data set is used, it should Not be called with an embedding from EmbedData() since EmbedData() will add lagged coordinates for each variable.  These extra columns will not correspond to the intended dimensions in the matrix inversion and prediction reconstruction.  In this case, use the -e (embedded) flag so that the -c (columns) selected correspond to the proper dimension.
 
-Jacobians of intra-variable S-Map coefficients can be stored with the -j command.  Keep in mind that the S-Map coefficients themselves are representations of the phase-space variable Jacobians with respect to time ∂C(t+1)/∂C(t).
+Hessian of intra-variable S-Map coefficients can be plotted and stored with the -H option.  Keep in mind that S-Map coefficients are estimates of the phase-space variable Jacobians with respect to time ∂C(t+1)/∂C(t) and the other variables ∂Cx(t+1)/∂Cy(t).

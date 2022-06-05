@@ -8,7 +8,7 @@ from itertools       import combinations
 import numpy as np
 import matplotlib.pyplot as plt
 from   matplotlib.dates import num2date
-from   numpy.random     import randint, seed
+from   numpy.random     import choice, randint, seed
 
 # Local modules
 from ArgParse import ParseCmdLine
@@ -179,11 +179,15 @@ def EmbedDimensions( args, source = Source.Python ):
         ax.plot( E_rho.keys(), E_rho.values(),
                  label = 'Predictions_t(+{0:d})'.format( args.Tp ),
                  color='blue', linewidth = 3 )
-        
+
+        if args.plotTitle is not None :
+            title = args.plotTitle
+        else:
+            title = args.inputFile + ' Tp=' + str( args.Tp )
+            
         ax.set( xlabel = 'Embedding Dimension',
                 ylabel = 'Prediction Skill' + r' $\rho$',
-                title  = args.inputFile +\
-                         ' Tp=' + str( args.Tp ) )
+                title  = title )
         plt.show()
 
     if source == Source.Jupyter :
@@ -289,10 +293,14 @@ def PredictDecays( args, source = Source.Python ):
                  label = 'Predictions_t(+{0:d})'.format( args.Tp ),
                  color='blue', linewidth = 3 )
         
+        if args.plotTitle is not None :
+            title = args.plotTitle
+        else:
+            title = args.inputFile + ' E=' + str( args.E )
+            
         ax.set( xlabel = 'Forecast time Tp',
                 ylabel = 'Prediction Skill' + r' $\rho$',
-                title  = args.inputFile +\
-                         ' E=' + str( args.E ) )
+                title  = title )
         plt.show()
 
     if source == Source.Jupyter :
@@ -411,10 +419,15 @@ def SMapNL( args, data = None, colNames = None, target = None, thetas = None,
                  label = 'Predictions_t(+{0:d})'.format( args.Tp ),
                  color='blue', linewidth = 3 )
         
+        if args.plotTitle is not None :
+            title = args.plotTitle
+        else:
+            title = args.inputFile + ' Tp=' + str( args.Tp ) +\
+                    ' E=' + str( args.E )
+            
         ax.set( xlabel = 'S Map Localization θ',
                 ylabel = 'Prediction Skill' + r' $\rho$',
-                title  = args.inputFile + ' Tp=' + str( args.Tp ) +\
-                         ' E=' + str( args.E ) )
+                title  = title )
         plt.show()
 
     if source == Source.Jupyter :
@@ -521,10 +534,10 @@ def Multiview( args, source = Source.Python ):
                                               Combo_rho.keys() ),
                                          reverse = True ) )
     
-    if args.Debug:
+    if args.verbose:
         print( "Multiview()  In sample sorted embeddings:" )
         print( 'Columns         ρ' )
-        for i in range( min( args.multiview, len( combo_sort ) ) ):
+        for i in range( len( combo_sort ) ):
             print(str( combo_sort[i] ) + "    " + str( round( rho_sort[i],4)))
     
     #---------------------------------------------------------------
@@ -614,13 +627,18 @@ def Multiview( args, source = Source.Python ):
                 ax.plot( multiview_out[ :, 0 ], M[ :, col ],
                          label = combo_sort[col], linewidth = 2 )
         
+        if args.plotTitle is not None :
+            title = args.plotTitle
+        else:
+            title = "Multiview  " + args.inputFile +\
+                    ' Tp=' + str( args.Tp )        +\
+                    ' E='  + str( args.E )         +\
+                     r' $\rho$=' + str( round( rho, 2 ) )
+            
         ax.legend()
         ax.set( xlabel = args.plotXLabel,
                 ylabel = args.plotYLabel,
-                title  = "Multiview  " + args.inputFile +\
-                         ' Tp=' + str( args.Tp ) +\
-                         ' E='  + str( args.E ) + r' $\rho$=' +\
-                str( round( rho, 2 ) ) )
+                title  = title )
         plt.show()
 
     if source == Source.Jupyter :
@@ -697,9 +715,10 @@ def CCM( args, source = Source.Python ):
     the use of a process Pool. 
     
     Arguments: 
-    -L (libsize) specifies a list of library sizes [start, stop, increment]
-    -s (subsample) number of subsamples generated at each library size, if:
-    -R (replacement) subsample with replacement. 
+    -L  (libsize) specifies a list of library sizes [start, stop, increment]
+    -s  number of subsamples generated at each library size
+    -R  random subsamples
+    -rp subsample with replacement
 
     Simplex "Predictions" are made over the same data/embedding slices as
     the library so that -l and -p parameters have no meaning. 
@@ -786,10 +805,14 @@ def CCM( args, source = Source.Python ):
         plt.axhline( y = 0, linewidth = 1 )
         ax.legend()
         
+        if args.plotTitle is not None :
+            title = args.plotTitle
+        else:
+            title = args.inputFile + '  E=' + str( args.E  )
+            
         ax.set( xlabel = 'Library Size',
                 ylabel = "Cross map correlation " + r' $\rho$',
-                title  = args.inputFile +\
-                '  E=' + str( args.E  ) )
+                title  = title )
         plt.show()
         
     if source == Source.Jupyter :
@@ -815,6 +838,14 @@ def CrossMap( args ) :
 
     # Range of CCM library indices
     start, stop, increment = args.libsize
+
+    if args.randomLib and not args.replacement :
+        # Sampling with replacement, validate lib_size
+        if stop > N_row :
+            raise RuntimeError( "CCM CrossMap() Random library without "+\
+                                "replacement requires max lib_size "    +\
+                                str( stop ) + " less than or equal to " +\
+                                "N_row " + str( N_row ) )
     
     if args.randomLib :
         # Random samples from library with replacement
@@ -857,10 +888,16 @@ def CrossMap( args ) :
         for n in range( maxSamples ) :
 
             if args.randomLib :
-                # Uniform random sample of rows, with replacement
-                lib_i = randint( low  = 0,
-                                 high = N_row,
-                                 size = lib_size )
+                if args.replacement :
+                    # Uniform random sample of rows, with replacement
+                    lib_i = randint( low  = 0,
+                                     high = N_row,
+                                     size = lib_size )
+                else :
+                    # Uniform random sample of rows, without replacement
+                    lib_i = choice( a       = N_row,    # = np.arange(a)
+                                    size    = lib_size,
+                                    replace = False )
             else :
                 if lib_size >= N_row :
                     # library size exceeded, back down
@@ -885,11 +922,13 @@ def CrossMap( args ) :
             #----------------------------------------------------------
             neighbors, distances = CCMGetNeighbors( Distances, lib_i, args )
 
-            predictions = SimplexProjection( libraryMatrix[ lib_i, : ],
-                                             target       [ lib_i ],
-                                             neighbors,
-                                             distances,
-                                             args )
+            predictions, const_predict = \
+                SimplexProjection( libraryMatrix[ lib_i, : ],
+                                   target       [ lib_i ],
+                                   target       [ lib_i ], # const_target NA
+                                   neighbors,
+                                   distances,
+                                   args )
 
             rho, rmse, mae = ComputeError( target[ lib_i ], predictions )
 
